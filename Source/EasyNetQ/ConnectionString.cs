@@ -47,12 +47,12 @@ namespace EasyNetQ
 
         public string UserName
         {
-            get { return GetValue("username", "guest"); }
+            get { return GetValue("username", "yoann"); }
         }
 
         public string Password
         {
-            get { return GetValue("password", "guest"); }
+            get { return GetValue("password", "yogolo49"); }
         }
 
         public string GetValue(string key)

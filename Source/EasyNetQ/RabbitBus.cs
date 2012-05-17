@@ -98,6 +98,23 @@ namespace EasyNetQ
             RawPublish(exchangeName, topic, typeName, messageBody);
         }
 
+        public void Publish(Object message, Type type)
+        {
+            if (message == null)
+            {
+                throw new ArgumentNullException("message");
+            }
+
+            var typeName = serializeType(type);
+            var exchangeName = GetExchangeName(type);
+            var topic = GetTopic(type);
+            var messageBody = serializer.MessageToBytes(message);
+
+            RawPublish(exchangeName, topic, typeName, messageBody);
+        }
+
+
+
         // channels should not be shared between threads.
         private ThreadLocal<IModel> threadLocalPublishChannel = new ThreadLocal<IModel>(); 
         
@@ -257,6 +274,18 @@ namespace EasyNetQ
 		}
 
 
+        private string GetTopic(Type type)
+        {
+            return conventions.TopicNamingConvention(type);
+        }
+
+
+        private string GetExchangeName(Type type)
+        {
+            return conventions.ExchangeNamingConvention(type);
+        }
+
+
 		private string GetQueueName<T>(string subscriptionId)
 		{
 			return conventions.QueueNamingConvention(typeof (T), subscriptionId);
@@ -301,6 +330,7 @@ namespace EasyNetQ
 
             RequestPublish(request, returnQueueName);
         }
+
 
         private void SubscribeToResponse<TResponse>(Action<TResponse> onResponse, string returnQueueName)
         {

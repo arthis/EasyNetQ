@@ -38,6 +38,11 @@ namespace EasyNetQ
             }
         }
 
+        public void Publish(object message, Type type)
+        {
+            throw new NotImplementedException();
+        }
+
         public void Subscribe<T>(string subscriptionId, Action<T> onMessage)
         {
             var messageType = typeof (T);
@@ -63,6 +68,11 @@ namespace EasyNetQ
             // TODO: deal with multiple calls to Request (cache and resue onResponse)
             Subscribe("id", onResponse);
             Publish(request);
+        }
+
+        public TResponse Request<TRequest, TResponse>(TRequest request, int timeOut)
+        {
+            throw new NotImplementedException();
         }
 
         public void Respond<TRequest, TResponse>(Func<TRequest, TResponse> responder)

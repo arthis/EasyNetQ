@@ -16,6 +16,14 @@ namespace EasyNetQ
         void Publish<T>(T message);
 
         /// <summary>
+        /// Publishes a message.
+        /// </summary>
+        /// <param name="message">The message to publish</param>
+        /// <param name="type">The message type</param>
+        void Publish(Object message, Type type);
+        
+
+        /// <summary>
         /// Subscribes to a stream of messages that match a .NET type.
         /// </summary>
         /// <typeparam name="T">The type to subscribe to</typeparam>
