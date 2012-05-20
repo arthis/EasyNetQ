@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 using Newtonsoft.Json;
 
 namespace EasyNetQ
@@ -14,5 +15,7 @@ namespace EasyNetQ
         {
             return JsonConvert.DeserializeObject<T>(Encoding.UTF8.GetString(bytes));
         }
+
+       
     }
 }

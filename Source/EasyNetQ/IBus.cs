@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using CommonDomain;
 
 namespace EasyNetQ
 {
@@ -19,8 +20,24 @@ namespace EasyNetQ
         /// Publishes a message.
         /// </summary>
         /// <param name="message">The message to publish</param>
-        /// <param name="type">The message type</param>
-        void Publish(Object message, Type type);
+        /// <param name="type">The message type to get the queue name to be used</param>
+        void Publish(IMessage message, Type type);
+
+        /// <summary>
+        /// Subscribes to a stream of messages that match a .NET type.
+        /// </summary>
+        /// <param name="subscriptionId">
+        /// A unique identifier for the subscription. Two subscriptions with the same subscriptionId
+        /// and type will get messages delivered in turn. This is useful if you want multiple subscribers
+        /// to load balance a subscription in a round-robin fashion.
+        /// </param>
+        /// <param name="type">The type to subscribe to</param>
+        /// <param name="onMessage">
+        /// The action to run when a message arrives. When onMessage completes the message
+        /// recipt is Ack'd. All onMessage delegates are processed on a single thread so you should
+        /// avoid long running blocking IO operations. Consider using SubscribeAsync
+        /// </param>
+        void SubscribeToMessage(string subscriptionId, Type type, Action<IMessage> onMessage);
         
 
         /// <summary>

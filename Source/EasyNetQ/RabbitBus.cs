@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyNetQ.SystemMessages;
+using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
+using CommonDomain;
 
 
 namespace EasyNetQ
@@ -98,7 +101,7 @@ namespace EasyNetQ
             RawPublish(exchangeName, topic, typeName, messageBody);
         }
 
-        public void Publish(Object message, Type type)
+        public void Publish(IMessage message, Type type)
         {
             if (message == null)
             {
@@ -191,6 +194,87 @@ namespace EasyNetQ
                 throw new EasyNetQInvalidMessageTypeException("Message type is incorrect. Expected '{0}', but was '{1}'",
                     typeName, properties.Type);
             }
+        }
+
+        private void CheckMessageType(IBasicProperties properties, Type type)
+        {
+            var typeName = serializeType(type);
+            if (properties.Type != typeName)
+            {
+                logger.ErrorWrite("Message type is incorrect. Expected '{0}', but was '{1}'",
+                    typeName, properties.Type);
+
+                throw new EasyNetQInvalidMessageTypeException("Message type is incorrect. Expected '{0}', but was '{1}'",
+                    typeName, properties.Type);
+            }
+        }
+
+        public void SubscribeToMessage(string subscriptionId, Type type, Action<IMessage> onMessage)
+        {
+            SubscribeToMessageAsync(subscriptionId, type, msg =>
+            {
+                var tcs = new TaskCompletionSource<object>();
+                try
+                {
+                    onMessage(msg);
+                    tcs.SetResult(null);
+                }
+                catch (Exception exception)
+                {
+                    tcs.SetException(exception);
+                }
+                return tcs.Task;
+            });
+        }
+
+        public void SubscribeToMessageAsync(string subscriptionId, Type type,Func<IMessage, Task> onMessage)
+        {
+            if (onMessage == null)
+            {
+                throw new ArgumentNullException("onMessage");
+            }
+
+            string queueName = GetQueueName(subscriptionId, type);
+            string exchangeName = GetExchangeName(type);
+            string topic = GetTopic(type);
+
+            Action subscribeAction = () =>
+            {
+                var channel = connection.CreateModel();
+                modelList.Add(channel);
+                DeclarePublishExchange(channel, exchangeName);
+
+                channel.BasicQos(0, prefetchCount, false);
+
+                var queue = channel.QueueDeclare(
+                    queueName,          // queue
+                    true,               // durable
+                    false,              // exclusive
+                    false,              // autoDelete
+                    null);              // arguments
+
+                channel.QueueBind(
+                    queue,              // queue
+                    exchangeName,           // exchange
+                    topic);          // routingKey
+
+                var consumer = consumerFactory.CreateConsumer(channel,
+                    (consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body) =>
+                    {
+                        CheckMessageType(properties, type);
+
+                        var message = JsonConvert.DeserializeObject<IMessage>(Encoding.UTF8.GetString(body));
+                        return onMessage(message);
+                    });
+
+                channel.BasicConsume(
+                    queueName,              // queue
+                    noAck,                  // noAck 
+                    consumer.ConsumerTag,   // consumerTag
+                    consumer);              // consumer
+            };
+
+            AddSubscriptionAction(subscribeAction);
         }
 
         public void Subscribe<T>(string subscriptionId, Action<T> onMessage)
@@ -290,6 +374,11 @@ namespace EasyNetQ
 		{
 			return conventions.QueueNamingConvention(typeof (T), subscriptionId);
 		}
+
+        private string GetQueueName(string subscriptionId, Type type)
+        {
+            return conventions.QueueNamingConvention(type, subscriptionId);
+        }
 
 
         public void Request<TRequest, TResponse>(TRequest request, Action<TResponse> onResponse)

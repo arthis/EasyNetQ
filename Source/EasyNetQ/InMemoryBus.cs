@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using CommonDomain;
 
 namespace EasyNetQ
 {
@@ -38,10 +39,16 @@ namespace EasyNetQ
             }
         }
 
-        public void Publish(object message, Type type)
+        public void Publish(IMessage message, Type type)
         {
             throw new NotImplementedException();
         }
+
+        public void SubscribeToMessage(string subscriptionId, Type type, Action<IMessage> onMessage)
+        {
+            throw new NotImplementedException();
+        }
+
 
         public void Subscribe<T>(string subscriptionId, Action<T> onMessage)
         {
