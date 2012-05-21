@@ -86,36 +86,21 @@ namespace EasyNetQ
 			subscribeActions = new ConcurrentBag<Action>();
         }
 
-        public void Publish<T>(T message)
+        public void Publish<T>(T message) where T : IMessage
         {
             if(message == null)
             {
                 throw new ArgumentNullException("message");
             }
 
-        	var typeName = serializeType(typeof (T));
-        	var exchangeName = GetExchangeName<T>();
-        	var topic = GetTopic<T>();
+            var typeName = serializeType(message.GetType());
+            var exchangeName = GetExchangeName(message.GetType());
+            var topic = GetTopic(message.GetType());
             var messageBody = serializer.MessageToBytes(message);
 
             RawPublish(exchangeName, topic, typeName, messageBody);
         }
-
-        public void Publish(IMessage message, Type type)
-        {
-            if (message == null)
-            {
-                throw new ArgumentNullException("message");
-            }
-
-            var typeName = serializeType(type);
-            var exchangeName = GetExchangeName(type);
-            var topic = GetTopic(type);
-            var messageBody = serializer.MessageToBytes(message);
-
-            RawPublish(exchangeName, topic, typeName, messageBody);
-        }
-
+    
 
 
         // channels should not be shared between threads.
@@ -209,9 +194,9 @@ namespace EasyNetQ
             }
         }
 
-        public void SubscribeToMessage(string subscriptionId, Type type, Action<IMessage> onMessage)
+        public void Subscribe<T>(string subscriptionId, Action<T> onMessage) where T : IMessage
         {
-            SubscribeToMessageAsync(subscriptionId, type, msg =>
+            SubscribeAsync<T>(subscriptionId, msg =>
             {
                 var tcs = new TaskCompletionSource<object>();
                 try
@@ -227,16 +212,16 @@ namespace EasyNetQ
             });
         }
 
-        public void SubscribeToMessageAsync(string subscriptionId, Type type,Func<IMessage, Task> onMessage)
+        public void SubscribeAsync<T>(string subscriptionId, Func<T, Task> onMessage) where T : IMessage
         {
             if (onMessage == null)
             {
                 throw new ArgumentNullException("onMessage");
             }
 
-            string queueName = GetQueueName(subscriptionId, type);
-            string exchangeName = GetExchangeName(type);
-            string topic = GetTopic(type);
+            string queueName = GetQueueName<T>(subscriptionId);
+            string exchangeName = GetExchangeName<T>();
+            string topic = GetTopic<T>();
 
             Action subscribeAction = () =>
             {
@@ -261,77 +246,9 @@ namespace EasyNetQ
                 var consumer = consumerFactory.CreateConsumer(channel,
                     (consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body) =>
                     {
-                        CheckMessageType(properties, type);
-
-                        var message = JsonConvert.DeserializeObject<IMessage>(Encoding.UTF8.GetString(body));
-                        return onMessage(message);
-                    });
-
-                channel.BasicConsume(
-                    queueName,              // queue
-                    noAck,                  // noAck 
-                    consumer.ConsumerTag,   // consumerTag
-                    consumer);              // consumer
-            };
-
-            AddSubscriptionAction(subscribeAction);
-        }
-
-        public void Subscribe<T>(string subscriptionId, Action<T> onMessage)
-        {
-            SubscribeAsync<T>(subscriptionId, msg =>
-            {
-                var tcs = new TaskCompletionSource<object>();
-                try
-                {
-                    onMessage(msg);
-                    tcs.SetResult(null);
-                }
-                catch (Exception exception)
-                {
-                    tcs.SetException(exception);
-                }
-                return tcs.Task;
-            });
-        }
-
-        public void SubscribeAsync<T>(string subscriptionId, Func<T, Task> onMessage)
-        {
-            if (onMessage == null)
-            {
-                throw new ArgumentNullException("onMessage");
-            }
-
-			string queueName = GetQueueName<T>(subscriptionId);
-			string exchangeName = GetExchangeName<T>();
-			string topic = GetTopic<T>();
-
-            Action subscribeAction = () =>
-            {
-                var channel = connection.CreateModel();
-                modelList.Add( channel );
-                DeclarePublishExchange(channel, exchangeName);
-
-                channel.BasicQos(0, prefetchCount, false);
-
-                var queue = channel.QueueDeclare(
-                    queueName,          // queue
-                    true,               // durable
-                    false,              // exclusive
-                    false,              // autoDelete
-                    null);              // arguments
-
-                channel.QueueBind(
-                    queue,              // queue
-                    exchangeName,           // exchange
-                    topic);          // routingKey
-
-                var consumer = consumerFactory.CreateConsumer(channel,
-                    (consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body) =>
-                    {
                         CheckMessageType<T>(properties);
 
-                        var message = serializer.BytesToMessage<T>(body);
+                        var message = JsonConvert.DeserializeObject<T>(Encoding.UTF8.GetString(body));
                         return onMessage(message);
                     });
 
@@ -344,6 +261,74 @@ namespace EasyNetQ
 
             AddSubscriptionAction(subscribeAction);
         }
+
+        //public void Subscribe<T>(string subscriptionId, Action<T> onMessage)
+        //{
+        //    SubscribeAsync<T>(subscriptionId, msg =>
+        //    {
+        //        var tcs = new TaskCompletionSource<object>();
+        //        try
+        //        {
+        //            onMessage(msg);
+        //            tcs.SetResult(null);
+        //        }
+        //        catch (Exception exception)
+        //        {
+        //            tcs.SetException(exception);
+        //        }
+        //        return tcs.Task;
+        //    });
+        //}
+
+        //public void SubscribeAsync<T>(string subscriptionId, Func<T, Task> onMessage)
+        //{
+        //    if (onMessage == null)
+        //    {
+        //        throw new ArgumentNullException("onMessage");
+        //    }
+
+        //    string queueName = GetQueueName<T>(subscriptionId);
+        //    string exchangeName = GetExchangeName<T>();
+        //    string topic = GetTopic<T>();
+
+        //    Action subscribeAction = () =>
+        //    {
+        //        var channel = connection.CreateModel();
+        //        modelList.Add( channel );
+        //        DeclarePublishExchange(channel, exchangeName);
+
+        //        channel.BasicQos(0, prefetchCount, false);
+
+        //        var queue = channel.QueueDeclare(
+        //            queueName,          // queue
+        //            true,               // durable
+        //            false,              // exclusive
+        //            false,              // autoDelete
+        //            null);              // arguments
+
+        //        channel.QueueBind(
+        //            queue,              // queue
+        //            exchangeName,           // exchange
+        //            topic);          // routingKey
+
+        //        var consumer = consumerFactory.CreateConsumer(channel,
+        //            (consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body) =>
+        //            {
+        //                CheckMessageType<T>(properties);
+
+        //                var message = serializer.BytesToMessage<T>(body);
+        //                return onMessage(message);
+        //            });
+
+        //        channel.BasicConsume(
+        //            queueName,              // queue
+        //            noAck,                  // noAck 
+        //            consumer.ConsumerTag,   // consumerTag
+        //            consumer);              // consumer
+        //    };
+
+        //    AddSubscriptionAction(subscribeAction);
+        //}
 
 
 		private string GetTopic<T>()
@@ -565,28 +550,28 @@ namespace EasyNetQ
             AddSubscriptionAction(subscribeAction);
         }
 
-        public void FuturePublish<T>(DateTime timeToRespond, T message)
-        {
-            if (message == null)
-            {
-                throw new ArgumentNullException("message");
-            }
+        //public void FuturePublish<T>(DateTime timeToRespond, T message)
+        //{
+        //    if (message == null)
+        //    {
+        //        throw new ArgumentNullException("message");
+        //    }
 
-            if (!connection.IsConnected)
-            {
-                throw new EasyNetQException("FuturePublish failed. No rabbit server connected.");
-            }
+        //    if (!connection.IsConnected)
+        //    {
+        //        throw new EasyNetQException("FuturePublish failed. No rabbit server connected.");
+        //    }
 
-            var typeName = serializeType(typeof(T));
-            var messageBody = serializer.MessageToBytes(message);
+        //    var typeName = serializeType(typeof(T));
+        //    var messageBody = serializer.MessageToBytes(message);
 
-            Publish(new ScheduleMe
-            {
-                WakeTime = timeToRespond,
-                BindingKey = typeName,
-                InnerMessage = messageBody
-            });
-        }
+        //    Publish(new ScheduleMe
+        //    {
+        //        WakeTime = timeToRespond,
+        //        BindingKey = typeName,
+        //        InnerMessage = messageBody
+        //    });
+        //}
 
         public event Action Connected;
 
